@@ -21,7 +21,7 @@
 <h2>01 · Poste PC</h2><p class="meta">ID du PC à donner à chaque téléphone :</p><div class="idbox" id="myid">ID PC en préparation…</div><div class="small" style="margin-top:7px">Identifiant permanent de ce poste</div><button id="copy" class="secondary">📋 Copier l'ID</button><button id="regen" class="secondary">🔄 Nouvel ID</button>
 <p id="status" class="status">Connexion au service…</p>
 <div class="notice">Le PC peut recevoir plusieurs téléphones en même temps. Chaque téléphone apparaît dans une carte séparée.</div>
-<hr><h2>02 · Historique</h2><p class="meta">Les vidéos sont enregistrées puis converties en <b>MP4 H.264/AAC</b> pour une bonne compatibilité. L'historique reste sur ce PC après fermeture et réouverture de la page.</p><button id="clearHistory" class="red">🗑 Effacer l'historique</button>
+<hr><h2>02 · Historique</h2><p class="meta">Les vidéos sont enregistrées dans le format vidéo compatible avec votre navigateur (MP4 si disponible, sinon WebM). Le téléchargement reste possible dans tous les cas. L'historique reste sur ce PC après fermeture et réouverture de la page.</p><button id="clearHistory" class="red">🗑 Effacer l'historique</button>
 <hr><h2>03 · Détection de mouvement</h2><p class="meta">La détection compare les images reçues. Si un changement important persiste, une alerte visuelle et sonore est déclenchée. Vous pouvez régler la sensibilité par caméra.</p><button id="enableAlarm" class="secondary">🔔 Activer l’alarme</button><button id="testAlarm" class="secondary">🚨 Tester</button><p class="small">L’alarme sonore nécessite une interaction avec la page dans certains navigateurs.</p>
 <hr><h2>04 · Historique des alertes</h2><div id="alerts" class="alertlog"></div><div id="noalerts" class="small">Aucune alerte.</div>
 <hr><h2>05 · Sécurité / réseau</h2><p class="meta">Le flux vidéo utilise WebRTC. Pour une utilisation mondiale fiable derrière certains routeurs/opérateurs, un serveur TURN peut être ajouté ultérieurement.</p>
@@ -47,7 +47,7 @@ function setupMotion(state){state.canvas=document.createElement('canvas');state.
 async function addRecord(data){const db=await dbp;return new Promise((res,rej)=>{const tx=db.transaction('records','readwrite');tx.objectStore('records').add(data).onsuccess=e=>res(e.target.result);tx.onerror=()=>rej(tx.error)})}
 async function allRecords(){const db=await dbp;return new Promise((res,rej)=>{const r=db.transaction('records','readonly').objectStore('records').getAll();r.onsuccess=()=>res(r.result.sort((a,b)=>b.created-a.created));r.onerror=()=>rej(r.error)})}
 async function deleteRecord(id){const db=await dbp;return new Promise((res,rej)=>{const tx=db.transaction('records','readwrite');tx.objectStore('records').delete(id);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}
-async function renderHistory(){const list=await allRecords();$('history').innerHTML='';$('nohistory').style.display=list.length?'none':'block';for(const r of list){const el=document.createElement('div');el.className='record-row';const thumb=document.createElement('video');thumb.className='thumb';thumb.muted=true;thumb.preload='metadata';thumb.src=URL.createObjectURL(r.blob);thumb.addEventListener('loadeddata',()=>{try{thumb.currentTime=Math.min(1,thumb.duration/2||0)}catch(_){}});const info=document.createElement('div');info.innerHTML='<b>'+esc(r.name)+'</b><span>'+esc(fmt(r.created))+' · '+esc(r.type||'Vidéo MP4')+'</span><div class="meta2">Durée : '+esc(r.durationText||'--:--')+' · Taille : '+esc(formatBytes(r.size||r.blob.size))+'</div>';const actions=document.createElement('div');actions.innerHTML='<button class="secondary play">▶ Lire</button><button class="secondary dl">⬇ Télécharger MP4</button><button class="red del">✕</button>';el.appendChild(thumb);el.appendChild(info);el.appendChild(actions);actions.querySelector('.play').onclick=()=>{const w=window.open('','_blank');if(!w){alert('Autorisez les fenêtres pop-up pour lire la vidéo.');return}w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Lecture MP4</title><style>html,body{margin:0;height:100%;background:#000}video{width:100%;height:100%;object-fit:contain}</style></head><body><video controls autoplay playsinline></video></body></html>`);w.document.close();const v=w.document.querySelector('video');v.src=URL.createObjectURL(r.blob)};actions.querySelector('.dl').onclick=()=>saveDownload(r.blob,r.name.endsWith('.mp4')?r.name:r.name+'.mp4');actions.querySelector('.del').onclick=async()=>{await deleteRecord(r.id);renderHistory()};$('history').appendChild(el)} }
+async function renderHistory(){const list=await allRecords();$('history').innerHTML='';$('nohistory').style.display=list.length?'none':'block';for(const r of list){const el=document.createElement('div');el.className='record-row';const thumb=document.createElement('video');thumb.className='thumb';thumb.muted=true;thumb.preload='metadata';thumb.src=URL.createObjectURL(r.blob);thumb.addEventListener('loadeddata',()=>{try{thumb.currentTime=Math.min(1,thumb.duration/2||0)}catch(_){}});const info=document.createElement('div');info.innerHTML='<b>'+esc(r.name)+'</b><span>'+esc(fmt(r.created))+' · '+esc(r.type||'Vidéo')+'</span><div class="meta2">Durée : '+esc(r.durationText||'--:--')+' · Taille : '+esc(formatBytes(r.size||r.blob.size))+'</div>';const actions=document.createElement('div');actions.innerHTML='<button class="secondary play">▶ Lire</button><button class="secondary dl">⬇ Télécharger</button><button class="red del">✕</button>';el.appendChild(thumb);el.appendChild(info);el.appendChild(actions);actions.querySelector('.play').onclick=()=>{const w=window.open('','_blank');if(!w){alert('Autorisez les fenêtres pop-up pour lire la vidéo.');return}w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Lecture MP4</title><style>html,body{margin:0;height:100%;background:#000}video{width:100%;height:100%;object-fit:contain}</style></head><body><video controls autoplay playsinline></video></body></html>`);w.document.close();const v=w.document.querySelector('video');v.src=URL.createObjectURL(r.blob)};actions.querySelector('.dl').onclick=()=>saveDownload(r.blob,r.name.endsWith('.mp4')?r.name:r.name+'.mp4');actions.querySelector('.del').onclick=async()=>{await deleteRecord(r.id);renderHistory()};$('history').appendChild(el)} }
 function formatBytes(n){if(!n)return '0 octet';const u=['octets','Ko','Mo','Go'];let i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++}return (i?x.toFixed(x<10?1:0):x.toFixed(0))+' '+u[i]}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function safeName(s){return String(s).replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,' ').trim().slice(0,60)||'Telephone'}
@@ -63,7 +63,7 @@ function addCamera(id,call,stream){
   const wrap=document.createElement('article');
   wrap.className='cam';
   wrap.id='cam-'+CSS.escape(id);
-  wrap.innerHTML='<div class="camhead"><div><span class="dot"></span><span class="camname">Téléphone '+esc(id)+'</span><div class="small">ID : '+esc(id)+'</div></div><button class="secondary rename">✏ Nom</button></div><video autoplay playsinline></video><div class="cambody"><div class="small info">Flux vidéo actif · <span class="motion off">● Surveillance active</span></div><div class="actions"><button class="photo">📸 Photo</button><button class="record">⏺ Enregistrer MP4</button><button class="stop red" disabled>⏹ Arrêter</button><button class="full secondary">⛶ Plein écran</button><button class="sensp secondary">Sensibilité</button><button class="close secondary">Déconnecter</button></div></div>';
+  wrap.innerHTML='<div class="camhead"><div><span class="dot"></span><span class="camname">Téléphone '+esc(id)+'</span><div class="small">ID : '+esc(id)+'</div></div><button class="secondary rename">✏ Nom</button></div><video autoplay playsinline></video><div class="cambody"><div class="small info">Flux vidéo actif · <span class="motion off">● Surveillance active</span></div><div class="actions"><button class="photo">📸 Photo</button><button class="record">⏺ Enregistrer vidéo</button><button class="stop red" disabled>⏹ Arrêter</button><button class="full secondary">⛶ Plein écran</button><button class="sensp secondary">Sensibilité</button><button class="close secondary">Déconnecter</button></div></div>';
   const video=wrap.querySelector('video');
   video.srcObject=stream;
   const state={id,call,stream,wrap,video,rec:null,chunks:[],name:'Téléphone '+id.slice(0,8),startedAt:0,thumb:null,sensitivity:22,autoRecord:true,alarmActive:false,cooldown:8000,closed:false};
@@ -110,28 +110,40 @@ async function convertToMp4(webmBlob){
 
 async function startRec(s){
   if(!s.stream||s.rec)return;
-  const mime=['video/mp4;codecs=h264,aac','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
+  const mime=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4;codecs=h264,aac','video/mp4'].find(t=>MediaRecorder.isTypeSupported(t));
+  if(!mime){say('Aucun format vidéo pris en charge par ce navigateur.');return}
   try{
     s.chunks=[];s.startedAt=Date.now();
-    s.rec=new MediaRecorder(s.stream,mime?{mimeType:mime,videoBitsPerSecond:5000000,audioBitsPerSecond:192000}:{});
+    s.rec=new MediaRecorder(s.stream,{mimeType:mime,videoBitsPerSecond:5000000,audioBitsPerSecond:192000});
     s.rec.ondataavailable=e=>{if(e.data&&e.data.size)s.chunks.push(e.data)};
     s.rec.onerror=e=>say('Erreur MediaRecorder : '+(e.error?.message||'enregistrement impossible'));
     s.rec.onstop=async()=>{
-      const rec=s.rec;
-      s.rec=null;
+      const rec=s.rec;s.rec=null;
       try{
-        const rawType=rec.mimeType||'video/webm';
+        const rawType=rec.mimeType||mime;
         const raw=new Blob(s.chunks,{type:rawType});
         if(!raw.size)throw new Error('Aucune donnée vidéo reçue');
         let blob=raw;
-        let type='Vidéo MP4';
-        if(!rawType.toLowerCase().includes('mp4')){
-          say('Conversion de '+s.name+' en MP4 H.264/AAC…');
-          blob=await convertToMp4(raw);
+        let ext=rawType.toLowerCase().includes('mp4')?'mp4':'webm';
+        let type=ext==='mp4'?'Vidéo MP4':'Vidéo WebM';
+
+        // MP4 is optional: if conversion is unavailable or fails, keep the original WebM.
+        if(ext!=='mp4' && window.FFmpegWASM && window.FFmpegUtil){
+          try{
+            say('Tentative de conversion en MP4…');
+            const converted=await convertToMp4(raw);
+            if(converted&&converted.size>=1000){
+              blob=converted;ext='mp4';type='Vidéo MP4';
+            }
+          }catch(convErr){
+            console.warn('Conversion MP4 non disponible, conservation du WebM.',convErr);
+            say('MP4 indisponible : vidéo WebM conservée.');
+          }
         }
-        if(!blob||blob.size<1000)throw new Error('Le fichier MP4 généré est vide ou invalide');
+
+        if(!blob||blob.size<1000)throw new Error('Le fichier vidéo est vide ou invalide');
         const safe=safeName(s.name);
-        const name='GOOD_DAV_NET_'+safe+'_'+stamp()+'.mp4';
+        const name='GOOD_DAV_NET_'+safe+'_'+stamp()+'.'+ext;
         const duration=Math.max(0,Date.now()-s.startedAt);
         const durationText=Math.floor(duration/60000).toString().padStart(2,'0')+':'+Math.floor((duration%60000)/1000).toString().padStart(2,'0');
         const thumb=await makeThumbnail(s.video);
@@ -139,11 +151,12 @@ async function startRec(s){
         s.chunks=[];
         await renderHistory();
         saveDownload(blob,name);
-        say('MP4 téléchargé et sauvegardé : '+name);
+        say(type+' téléchargée et sauvegardée : '+name);
       }catch(e){
-        say('Erreur MP4 : '+(e&&e.message?e.message:e));
-        console.error('GOOD DAV NET MP4',e);
+        say('Erreur d’enregistrement : '+(e&&e.message?e.message:e));
+        console.error('GOOD DAV NET recording',e);
       }finally{
+        s.chunks=[];
         s.wrap.querySelector('.record').disabled=false;
         s.wrap.querySelector('.stop').disabled=true;
         s.wrap.querySelector('.info').textContent='Flux vidéo actif';
@@ -153,7 +166,7 @@ async function startRec(s){
     s.wrap.querySelector('.record').disabled=true;
     s.wrap.querySelector('.stop').disabled=false;
     s.wrap.querySelector('.info').textContent='🔴 Enregistrement en cours…';
-    say('Enregistrement en cours : '+s.name);
+    say('Enregistrement en cours : '+s.name+' ('+mime+')');
   }catch(e){
     s.rec=null;
     say('Erreur MediaRecorder : '+e.message);
