@@ -51,32 +51,152 @@ async function renderHistory(){const list=await allRecords();$('history').innerH
 function formatBytes(n){if(!n)return '0 octet';const u=['octets','Ko','Mo','Go'];let i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++}return (i?x.toFixed(x<10?1:0):x.toFixed(0))+' '+u[i]}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function safeName(s){return String(s).replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,' ').trim().slice(0,60)||'Telephone'}
-function addCamera(id,call,stream){$('empty').style.display='none';const wrap=document.createElement('article');wrap.className='cam';wrap.id='cam-'+CSS.escape(id);wrap.innerHTML='<div class="camhead"><div><span class="dot"></span><span class="camname">Téléphone '+esc(id)+'</span><div class="small">ID : '+esc(id)+'</div></div><button class="secondary rename">✏ Nom</button></div><video autoplay playsinline></video><div class="cambody"><div class="small info">Flux vidéo actif · <span class="motion off">● Surveillance active</span></div><div class="actions"><button class="photo">📸 Photo</button><button class="record">⏺ Enregistrer MP4</button><button class="stop red" disabled>⏹ Arrêter</button><button class="full secondary">⛶ Plein écran</button><button class="sensp secondary">Sensibilité</button><button class="close secondary">Déconnecter</button></div></div>';const video=wrap.querySelector('video');video.srcObject=stream;const state={id,call,stream,wrap,video,rec:null,chunks:[],name:'Téléphone '+id.slice(0,8),startedAt:0,thumb:null,sensitivity:22,autoRecord:true,alarmActive:false,cooldown:8000};calls.set(id,state);wrap.querySelector('.rename').onclick=()=>{const n=prompt('Nom de ce téléphone :',state.name);if(n){state.name=safeName(n);wrap.querySelector('.camname').textContent=state.name}};wrap.querySelector('.photo').onclick=()=>{if(!video.videoWidth)return;const c=document.createElement('canvas');c.width=video.videoWidth;c.height=video.videoHeight;c.getContext('2d').drawImage(video,0,0);c.toBlob(b=>saveDownload(b,'GOOD_DAV_NET_'+state.name+'_'+stamp()+'.jpg'),'image/jpeg',.94)};wrap.querySelector('.record').onclick=()=>startRec(state);wrap.querySelector('.stop').onclick=()=>stopRec(state);wrap.querySelector('.full').onclick=()=>video.requestFullscreen?.();wrap.querySelector('.sensp').onclick=()=>{const n=prompt('Sensibilité de 5 à 60 (plus petit = plus sensible) :',state.sensitivity);const v=Number(n);if(v>=5&&v<=60)state.sensitivity=v};setupMotion(state);wrap.querySelector('.close').onclick=()=>{call.close();removeCamera(id)};$('cams').appendChild(wrap);return state}
+function addCamera(id,call,stream){
+  $('empty').style.display='none';
+  if(calls.has(id)){
+    const old=calls.get(id);
+    if(old.call===call)return old;
+    try{call.close()}catch(_){}
+    say('Ce téléphone est déjà connecté. Une seule case est conservée.');
+    return old;
+  }
+  const wrap=document.createElement('article');
+  wrap.className='cam';
+  wrap.id='cam-'+CSS.escape(id);
+  wrap.innerHTML='<div class="camhead"><div><span class="dot"></span><span class="camname">Téléphone '+esc(id)+'</span><div class="small">ID : '+esc(id)+'</div></div><button class="secondary rename">✏ Nom</button></div><video autoplay playsinline></video><div class="cambody"><div class="small info">Flux vidéo actif · <span class="motion off">● Surveillance active</span></div><div class="actions"><button class="photo">📸 Photo</button><button class="record">⏺ Enregistrer MP4</button><button class="stop red" disabled>⏹ Arrêter</button><button class="full secondary">⛶ Plein écran</button><button class="sensp secondary">Sensibilité</button><button class="close secondary">Déconnecter</button></div></div>';
+  const video=wrap.querySelector('video');
+  video.srcObject=stream;
+  const state={id,call,stream,wrap,video,rec:null,chunks:[],name:'Téléphone '+id.slice(0,8),startedAt:0,thumb:null,sensitivity:22,autoRecord:true,alarmActive:false,cooldown:8000,closed:false};
+  calls.set(id,state);
+  wrap.querySelector('.rename').onclick=()=>{const n=prompt('Nom de ce téléphone :',state.name);if(n){state.name=safeName(n);wrap.querySelector('.camname').textContent=state.name}};
+  wrap.querySelector('.photo').onclick=()=>{if(!video.videoWidth)return;const c=document.createElement('canvas');c.width=video.videoWidth;c.height=video.videoHeight;c.getContext('2d').drawImage(video,0,0);c.toBlob(b=>saveDownload(b,'GOOD_DAV_NET_'+state.name+'_'+stamp()+'.jpg'),'image/jpeg',.94)};
+  wrap.querySelector('.record').onclick=()=>startRec(state);
+  wrap.querySelector('.stop').onclick=()=>stopRec(state);
+  wrap.querySelector('.full').onclick=()=>video.requestFullscreen?.();
+  wrap.querySelector('.sensp').onclick=()=>{const n=prompt('Sensibilité de 5 à 60 (plus petit = plus sensible) :',state.sensitivity);const v=Number(n);if(v>=5&&v<=60)state.sensitivity=v};
+  wrap.querySelector('.close').onclick=()=>{try{call.close()}catch(_){} removeCamera(id)};
+  $('cams').appendChild(wrap);
+  setupMotion(state);
+  return state
+}
+
 async function convertToMp4(webmBlob){
-  if(!window.FFmpegWASM||!window.FFmpegUtil) throw new Error('Convertisseur MP4 indisponible');
+  if(!window.FFmpegWASM||!window.FFmpegUtil) throw new Error('Convertisseur MP4 indisponible : rechargez la page avec Internet actif');
   if(!window._ffmpeg){
     say('Chargement du convertisseur MP4…');
     const {FFmpeg}=window.FFmpegWASM;
     const {toBlobURL}=window.FFmpegUtil;
-    const base='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd';
+    const base='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.15/dist/umd';
     const f=new FFmpeg();
-    await f.load({coreURL:await toBlobURL(base+'/ffmpeg-core.js','text/javascript'),wasmURL:await toBlobURL(base+'/ffmpeg-core.wasm','application/wasm')});
+    f.on('progress',p=>{if(p&&typeof p.progress==='number')say('Conversion MP4… '+Math.round(p.progress*100)+'%')});
+    await f.load({
+      coreURL:await toBlobURL(base+'/ffmpeg-core.js','text/javascript'),
+      wasmURL:await toBlobURL(base+'/ffmpeg-core.wasm','application/wasm')
+    });
     window._ffmpeg=f;
   }
-  const f=window._ffmpeg; const {fetchFile}=window.FFmpegUtil;
-  try{await f.deleteFile('input.webm')}catch(_){} try{await f.deleteFile('output.mp4')}catch(_){}
+  const f=window._ffmpeg;
+  const {fetchFile}=window.FFmpegUtil;
+  try{await f.deleteFile('input.webm')}catch(_){}
+  try{await f.deleteFile('output.mp4')}catch(_){}
   await f.writeFile('input.webm',await fetchFile(webmBlob));
   await f.exec(['-i','input.webm','-c:v','libx264','-preset','veryfast','-crf','18','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart','output.mp4']);
   const data=await f.readFile('output.mp4');
-  try{await f.deleteFile('input.webm')}catch(_){} try{await f.deleteFile('output.mp4')}catch(_){}
-  return new Blob([data.buffer],{type:'video/mp4'});
+  try{await f.deleteFile('input.webm')}catch(_){}
+  try{await f.deleteFile('output.mp4')}catch(_){}
+  const bytes=data instanceof Uint8Array ? data : new Uint8Array(data);
+  return new Blob([bytes],{type:'video/mp4'});
 }
-async function startRec(s){if(!s.stream)return;const mime=['video/mp4;codecs=h264,aac','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));try{s.chunks=[];s.startedAt=Date.now();s.rec=new MediaRecorder(s.stream,mime?{mimeType:mime,videoBitsPerSecond:5000000,audioBitsPerSecond:192000}:{});s.rec.ondataavailable=e=>{if(e.data.size)s.chunks.push(e.data)};s.rec.onstop=async()=>{try{const raw=new Blob(s.chunks,{type:s.rec.mimeType||'video/webm'});let blob=raw;let type='Vidéo MP4';if(!(s.rec.mimeType||'').includes('mp4')){say('Conversion de '+s.name+' en MP4 H.264/AAC…');blob=await convertToMp4(raw)}const safe=safeName(s.name);const name='GOOD_DAV_NET_'+safe+'_'+stamp()+'.mp4';let durationText='--:--';const duration=Math.max(0,Date.now()-s.startedAt);durationText=Math.floor(duration/60000).toString().padStart(2,'0')+':'+Math.floor((duration%60000)/1000).toString().padStart(2,'0');const thumb=await makeThumbnail(s.video);await addRecord({created:Date.now(),name,type,blob,size:blob.size,durationMs:duration,durationText,thumbnail:thumb});s.chunks=[];await renderHistory();say('MP4 clair sauvegardé : '+name)}catch(e){say('Erreur de conversion MP4 : '+e.message)}};s.rec.start(1000);s.wrap.querySelector('.record').disabled=true;s.wrap.querySelector('.stop').disabled=false;s.wrap.querySelector('.info').textContent='🔴 Enregistrement en cours…';say('Enregistrement en cours : '+s.name)}catch(e){say('Erreur MediaRecorder : '+e.message)}}
+
+async function startRec(s){
+  if(!s.stream||s.rec)return;
+  const mime=['video/mp4;codecs=h264,aac','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
+  try{
+    s.chunks=[];s.startedAt=Date.now();
+    s.rec=new MediaRecorder(s.stream,mime?{mimeType:mime,videoBitsPerSecond:5000000,audioBitsPerSecond:192000}:{});
+    s.rec.ondataavailable=e=>{if(e.data&&e.data.size)s.chunks.push(e.data)};
+    s.rec.onerror=e=>say('Erreur MediaRecorder : '+(e.error?.message||'enregistrement impossible'));
+    s.rec.onstop=async()=>{
+      const rec=s.rec;
+      s.rec=null;
+      try{
+        const rawType=rec.mimeType||'video/webm';
+        const raw=new Blob(s.chunks,{type:rawType});
+        if(!raw.size)throw new Error('Aucune donnée vidéo reçue');
+        let blob=raw;
+        let type='Vidéo MP4';
+        if(!rawType.toLowerCase().includes('mp4')){
+          say('Conversion de '+s.name+' en MP4 H.264/AAC…');
+          blob=await convertToMp4(raw);
+        }
+        if(!blob||blob.size<1000)throw new Error('Le fichier MP4 généré est vide ou invalide');
+        const safe=safeName(s.name);
+        const name='GOOD_DAV_NET_'+safe+'_'+stamp()+'.mp4';
+        const duration=Math.max(0,Date.now()-s.startedAt);
+        const durationText=Math.floor(duration/60000).toString().padStart(2,'0')+':'+Math.floor((duration%60000)/1000).toString().padStart(2,'0');
+        const thumb=await makeThumbnail(s.video);
+        await addRecord({created:Date.now(),name,type,blob,size:blob.size,durationMs:duration,durationText,thumbnail:thumb});
+        s.chunks=[];
+        await renderHistory();
+        saveDownload(blob,name);
+        say('MP4 téléchargé et sauvegardé : '+name);
+      }catch(e){
+        say('Erreur MP4 : '+(e&&e.message?e.message:e));
+        console.error('GOOD DAV NET MP4',e);
+      }finally{
+        s.wrap.querySelector('.record').disabled=false;
+        s.wrap.querySelector('.stop').disabled=true;
+        s.wrap.querySelector('.info').textContent='Flux vidéo actif';
+      }
+    };
+    s.rec.start(1000);
+    s.wrap.querySelector('.record').disabled=true;
+    s.wrap.querySelector('.stop').disabled=false;
+    s.wrap.querySelector('.info').textContent='🔴 Enregistrement en cours…';
+    say('Enregistrement en cours : '+s.name);
+  }catch(e){
+    s.rec=null;
+    say('Erreur MediaRecorder : '+e.message);
+  }
+}
+
 async function makeThumbnail(video){try{if(!video.videoWidth)return null;const c=document.createElement('canvas');c.width=Math.min(video.videoWidth,640);c.height=Math.round(c.width*video.videoHeight/video.videoWidth);c.getContext('2d').drawImage(video,0,0,c.width,c.height);return await new Promise(res=>c.toBlob(res,'image/jpeg',.82))}catch(_){return null}}
 function stopRec(s){if(s.rec&&s.rec.state!=='inactive')s.rec.stop();s.wrap.querySelector('.record').disabled=false;s.wrap.querySelector('.stop').disabled=true;s.wrap.querySelector('.info').textContent='Flux vidéo actif'}
-function removeCamera(id){const s=calls.get(id);if(!s)return;if(s.rec&&s.rec.state!=='inactive')s.rec.stop();clearInterval(s.motionTimer);s.wrap.remove();calls.delete(id);if(!calls.size)$('empty').style.display='block';say('Téléphone déconnecté.')}
+function removeCamera(id){
+  const s=calls.get(id);
+  if(!s)return;
+  s.closed=true;
+  if(s.rec&&s.rec.state!=='inactive')s.rec.stop();
+  clearInterval(s.motionTimer);
+  try{if(s.stream)s.stream.getTracks().forEach(t=>t.stop())}catch(_){}
+  try{if(s.call&&s.call.open)s.call.close()}catch(_){}
+  if(s.wrap)s.wrap.remove();
+  calls.delete(id);
+  if(!calls.size)$('empty').style.display='block';
+  say('Téléphone déconnecté.');
+}
+
 function getPcId(){let id=localStorage.getItem('gdn_pc_id');if(!id){id='GDN-PC-'+Math.random().toString(36).slice(2,8).toUpperCase();localStorage.setItem('gdn_pc_id',id)}return id}
-function startPeer(){const wanted=getPcId();$('myid').textContent=wanted;$('myid').title='ID PC : '+wanted;say('ID PC créé. Connexion au service…');try{peer=new Peer(wanted,{debug:1});}catch(e){say('Erreur de démarrage : '+e.message);return}peer.on('open',id=>{$('myid').textContent=id;$('myid').title='ID PC : '+id;localStorage.setItem('gdn_pc_id',id);say('PC prêt. ID affiché ci-dessus. Vous pouvez connecter plusieurs téléphones.')});peer.on('error',e=>{if(e.type==='unavailable-id'){localStorage.removeItem('gdn_pc_id');say('ID déjà utilisé. Génération d’un nouvel ID…');setTimeout(startPeer,500);return}say('Erreur réseau PeerJS : '+e.type+'. Vérifiez Internet et réessayez.')});peer.on('call',c=>{const id=c.peer;if(calls.has(id))removeCamera(id);say('Connexion reçue du téléphone '+id+'…');c.answer();c.on('stream',s=>{addCamera(id,c,s);say('Téléphone connecté. Surveillance en direct active.')});c.on('close',()=>removeCamera(id));c.on('error',e=>say('Erreur avec '+id+' : '+e.message))});}
+function startPeer(){const wanted=getPcId();$('myid').textContent=wanted;$('myid').title='ID PC : '+wanted;say('ID PC créé. Connexion au service…');try{peer=new Peer(wanted,{debug:1});}catch(e){say('Erreur de démarrage : '+e.message);return}peer.on('open',id=>{$('myid').textContent=id;$('myid').title='ID PC : '+id;localStorage.setItem('gdn_pc_id',id);say('PC prêt. ID affiché ci-dessus. Vous pouvez connecter plusieurs téléphones.')});peer.on('error',e=>{if(e.type==='unavailable-id'){localStorage.removeItem('gdn_pc_id');say('ID déjà utilisé. Génération d’un nouvel ID…');setTimeout(startPeer,500);return}say('Erreur réseau PeerJS : '+e.type+'. Vérifiez Internet et réessayez.')});peer.on('call',c=>{
+  const id=c.peer;
+  if(calls.has(id)){
+    try{c.close()}catch(_){}
+    say('Téléphone '+id+' déjà connecté : connexion en double ignorée.');
+    return;
+  }
+  say('Connexion reçue du téléphone '+id+'…');
+  c.answer();
+  let accepted=false;
+  c.on('stream',s=>{
+    if(accepted)return;
+    accepted=true;
+    if(calls.has(id)){try{c.close()}catch(_){};return}
+    addCamera(id,c,s);
+    say('Téléphone connecté. Surveillance en direct active.');
+  });
+  c.on('close',()=>{if(accepted)removeCamera(id)});
+  c.on('error',e=>{if(!accepted)say('Erreur avec '+id+' : '+e.message)});
+});}
 if(typeof Peer==='undefined'){ $('myid').textContent=getPcId(); say('ID PC affiché. Bibliothèque de connexion indisponible : vérifiez Internet.'); } else { startPeer(); }
 $('enableAlarm').onclick=()=>{alarmEnabled=!alarmEnabled;ensureAudio();$('enableAlarm').textContent=alarmEnabled?'🔔 Alarme activée':'🔕 Alarme désactivée';say(alarmEnabled?'Alarme de mouvement activée.':'Alarme de mouvement désactivée.')};$('testAlarm').onclick=()=>{alarmEnabled=true;alarmMuted=false;ensureAudio();$('alarmbar').classList.add('show');$('alarmText').textContent='🚨 TEST ALARME';beep();setTimeout(()=>{$('alarmbar').classList.remove('show');clearInterval(alarmTimer)},2200)};$('muteAlarm').onclick=()=>{alarmMuted=true;clearInterval(alarmTimer);say('Alarme sonore coupée. La détection reste active.')};$('ackAlarm').onclick=()=>{for(const s of calls.values())stopAlarm(s);alarmMuted=false;say('Alertes acquittées.')};$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('myid').textContent);say('ID PC copié.')}catch{say('Copie impossible : sélectionnez l’ID manuellement.')}};
 $('regen').onclick=()=>{if(confirm('Créer un nouvel ID PC ? Les téléphones devront utiliser ce nouvel ID.')){localStorage.removeItem('gdn_pc_id');location.reload()}};
