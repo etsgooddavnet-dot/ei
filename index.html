@@ -20,7 +20,7 @@
 <aside class="card">
 <h2>01 · Poste PC</h2><p class="meta">ID du PC à donner à chaque téléphone :</p><div class="idbox" id="myid">ID PC en préparation…</div><div class="small" style="margin-top:7px">Identifiant permanent de ce poste</div><button id="copy" class="secondary">📋 Copier l'ID</button><button id="regen" class="secondary">🔄 Nouvel ID</button>
 <p id="status" class="status">Connexion au service…</p>
-<div class="notice">Le PC peut recevoir plusieurs téléphones en même temps. Chaque téléphone apparaît dans une carte séparée.</div>
+<div class="notice">Le poste de surveillance peut être un <b>PC ou un téléphone</b>. Chaque téléphone caméra apparaît dans une carte séparée. Le même CAM_PC.html fonctionne dans les deux cas.</div>
 <hr><h2>02 · Historique</h2><p class="meta">Les vidéos sont enregistrées dans le format vidéo compatible avec votre navigateur (MP4 si disponible, sinon WebM). Le téléchargement reste possible dans tous les cas. L'historique reste sur ce PC après fermeture et réouverture de la page.</p><button id="clearHistory" class="red">🗑 Effacer l'historique</button>
 <hr><h2>03 · Détection de mouvement</h2><p class="meta">La détection compare les images reçues. Si un changement important persiste, une alerte visuelle et sonore est déclenchée. Vous pouvez régler la sensibilité par caméra.</p><button id="enableAlarm" class="secondary">🔔 Activer l’alarme</button><button id="testAlarm" class="secondary">🚨 Tester</button><p class="small">L’alarme sonore nécessite une interaction avec la page dans certains navigateurs.</p>
 <hr><h2>04 · Historique des alertes</h2><div id="alerts" class="alertlog"></div><div id="noalerts" class="small">Aucune alerte.</div>
@@ -47,7 +47,7 @@ function setupMotion(state){state.canvas=document.createElement('canvas');state.
 async function addRecord(data){const db=await dbp;return new Promise((res,rej)=>{const tx=db.transaction('records','readwrite');tx.objectStore('records').add(data).onsuccess=e=>res(e.target.result);tx.onerror=()=>rej(tx.error)})}
 async function allRecords(){const db=await dbp;return new Promise((res,rej)=>{const r=db.transaction('records','readonly').objectStore('records').getAll();r.onsuccess=()=>res(r.result.sort((a,b)=>b.created-a.created));r.onerror=()=>rej(r.error)})}
 async function deleteRecord(id){const db=await dbp;return new Promise((res,rej)=>{const tx=db.transaction('records','readwrite');tx.objectStore('records').delete(id);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}
-async function renderHistory(){const list=await allRecords();$('history').innerHTML='';$('nohistory').style.display=list.length?'none':'block';for(const r of list){const el=document.createElement('div');el.className='record-row';const thumb=document.createElement('video');thumb.className='thumb';thumb.muted=true;thumb.preload='metadata';thumb.src=URL.createObjectURL(r.blob);thumb.addEventListener('loadeddata',()=>{try{thumb.currentTime=Math.min(1,thumb.duration/2||0)}catch(_){}});const info=document.createElement('div');info.innerHTML='<b>'+esc(r.name)+'</b><span>'+esc(fmt(r.created))+' · '+esc(r.type||'Vidéo')+'</span><div class="meta2">Durée : '+esc(r.durationText||'--:--')+' · Taille : '+esc(formatBytes(r.size||r.blob.size))+'</div>';const actions=document.createElement('div');actions.innerHTML='<button class="secondary play">▶ Lire</button><button class="secondary dl">⬇ Télécharger</button><button class="red del">✕</button>';el.appendChild(thumb);el.appendChild(info);el.appendChild(actions);actions.querySelector('.play').onclick=()=>{const w=window.open('','_blank');if(!w){alert('Autorisez les fenêtres pop-up pour lire la vidéo.');return}w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Lecture MP4</title><style>html,body{margin:0;height:100%;background:#000}video{width:100%;height:100%;object-fit:contain}</style></head><body><video controls autoplay playsinline></video></body></html>`);w.document.close();const v=w.document.querySelector('video');v.src=URL.createObjectURL(r.blob)};actions.querySelector('.dl').onclick=()=>saveDownload(r.blob,r.name.endsWith('.mp4')?r.name:r.name+'.mp4');actions.querySelector('.del').onclick=async()=>{await deleteRecord(r.id);renderHistory()};$('history').appendChild(el)} }
+async function renderHistory(){const list=await allRecords();$('history').innerHTML='';$('nohistory').style.display=list.length?'none':'block';for(const r of list){const el=document.createElement('div');el.className='record-row';const thumb=document.createElement('video');thumb.className='thumb';thumb.muted=true;thumb.preload='metadata';thumb.src=URL.createObjectURL(r.blob);thumb.addEventListener('loadeddata',()=>{try{thumb.currentTime=Math.min(1,thumb.duration/2||0)}catch(_){}});const info=document.createElement('div');info.innerHTML='<b>'+esc(r.name)+'</b><span>'+esc(fmt(r.created))+' · '+esc(r.type||'Vidéo')+'</span><div class="meta2">Durée : '+esc(r.durationText||'--:--')+' · Taille : '+esc(formatBytes(r.size||r.blob.size))+'</div>';const actions=document.createElement('div');actions.innerHTML='<button class="secondary play">▶ Lire</button><button class="secondary dl">⬇ Télécharger</button><button class="red del">✕</button>';el.appendChild(thumb);el.appendChild(info);el.appendChild(actions);actions.querySelector('.play').onclick=()=>{const w=window.open('','_blank');if(!w){alert('Autorisez les fenêtres pop-up pour lire la vidéo.');return}w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Lecture vidéo</title><style>html,body{margin:0;height:100%;background:#000}video{width:100%;height:100%;object-fit:contain}</style></head><body><video controls autoplay playsinline></video></body></html>`);w.document.close();const v=w.document.querySelector('video');v.src=URL.createObjectURL(r.blob)};actions.querySelector('.dl').onclick=()=>saveDownload(r.blob,r.name);actions.querySelector('.del').onclick=async()=>{await deleteRecord(r.id);renderHistory()};$('history').appendChild(el)} }
 function formatBytes(n){if(!n)return '0 octet';const u=['octets','Ko','Mo','Go'];let i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++}return (i?x.toFixed(x<10?1:0):x.toFixed(0))+' '+u[i]}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function safeName(s){return String(s).replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,' ').trim().slice(0,60)||'Telephone'}
@@ -190,7 +190,33 @@ function removeCamera(id){
 }
 
 function getPcId(){let id=localStorage.getItem('gdn_pc_id');if(!id){id='GDN-PC-'+Math.random().toString(36).slice(2,8).toUpperCase();localStorage.setItem('gdn_pc_id',id)}return id}
-function startPeer(){const wanted=getPcId();$('myid').textContent=wanted;$('myid').title='ID PC : '+wanted;say('ID PC créé. Connexion au service…');try{peer=new Peer(wanted,{debug:1});}catch(e){say('Erreur de démarrage : '+e.message);return}peer.on('open',id=>{$('myid').textContent=id;$('myid').title='ID PC : '+id;localStorage.setItem('gdn_pc_id',id);say('PC prêt. ID affiché ci-dessus. Vous pouvez connecter plusieurs téléphones.')});peer.on('error',e=>{if(e.type==='unavailable-id'){localStorage.removeItem('gdn_pc_id');say('ID déjà utilisé. Génération d’un nouvel ID…');setTimeout(startPeer,500);return}say('Erreur réseau PeerJS : '+e.type+'. Vérifiez Internet et réessayez.')});peer.on('call',c=>{
+function peerOptions(){return{debug:1,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'}]}}}
+function startPeer(){
+  const wanted=getPcId();
+  $('myid').textContent=wanted;
+  $('myid').title='ID PC : '+wanted;
+  say('ID PC créé. Connexion au service…');
+  try{peer=new Peer(wanted,peerOptions())}catch(e){say('Erreur de démarrage : '+e.message);return}
+  peer.on('open',id=>{
+    $('myid').textContent=id;
+    $('myid').title='ID PC : '+id;
+    localStorage.setItem('gdn_pc_id',id);
+    say('Console prête. ID affiché ci-dessus. Ce fichier peut être ouvert sur PC ou téléphone.');
+  });
+  peer.on('error',e=>{
+    if(e.type==='unavailable-id'){
+      localStorage.removeItem('gdn_pc_id');
+      say('ID déjà utilisé. Génération d’un nouvel ID…');
+      setTimeout(startPeer,500);
+      return
+    }
+    say('Erreur réseau PeerJS : '+(e.type||e.message||e)+'. Vérifiez Internet.');
+  });
+  peer.on('disconnected',()=>{
+    say('Connexion PeerJS interrompue. Tentative de reconnexion…');
+    try{peer.reconnect()}catch(_){}
+  });
+  peer.on('call',c=>{
   const id=c.peer;
   if(calls.has(id)){
     try{c.close()}catch(_){}
@@ -207,8 +233,8 @@ function startPeer(){const wanted=getPcId();$('myid').textContent=wanted;$('myid
     addCamera(id,c,s);
     say('Téléphone connecté. Surveillance en direct active.');
   });
-  c.on('close',()=>{if(accepted)removeCamera(id)});
-  c.on('error',e=>{if(!accepted)say('Erreur avec '+id+' : '+e.message)});
+  c.on('close',()=>{if(accepted)removeCamera(id);else say('Connexion interrompue avec '+id+'.')});
+  c.on('error',e=>{if(!accepted)say('Erreur avec '+id+' : '+(e.message||e))});
 });}
 if(typeof Peer==='undefined'){ $('myid').textContent=getPcId(); say('ID PC affiché. Bibliothèque de connexion indisponible : vérifiez Internet.'); } else { startPeer(); }
 $('enableAlarm').onclick=()=>{alarmEnabled=!alarmEnabled;ensureAudio();$('enableAlarm').textContent=alarmEnabled?'🔔 Alarme activée':'🔕 Alarme désactivée';say(alarmEnabled?'Alarme de mouvement activée.':'Alarme de mouvement désactivée.')};$('testAlarm').onclick=()=>{alarmEnabled=true;alarmMuted=false;ensureAudio();$('alarmbar').classList.add('show');$('alarmText').textContent='🚨 TEST ALARME';beep();setTimeout(()=>{$('alarmbar').classList.remove('show');clearInterval(alarmTimer)},2200)};$('muteAlarm').onclick=()=>{alarmMuted=true;clearInterval(alarmTimer);say('Alarme sonore coupée. La détection reste active.')};$('ackAlarm').onclick=()=>{for(const s of calls.values())stopAlarm(s);alarmMuted=false;say('Alertes acquittées.')};$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('myid').textContent);say('ID PC copié.')}catch{say('Copie impossible : sélectionnez l’ID manuellement.')}};
